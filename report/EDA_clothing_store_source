@@ -1,0 +1,488 @@
+---
+title: "Data Mining - Response to Promotions"
+author: "Krzysztof Radomski"
+date: last-modified
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    colorlinks: true
+    papersize: a4
+    geometry:
+      - margin=10mm
+execute:
+  echo: false
+  warning: false
+---
+
+# Introduction
+
+The purpose of this report is to conduct an exploratory data analysis of clothing store customer data and to examine the factors that may influence customer response to promotional activities. The analysis was performed on a dataset containing information regarding customer purchasing behavior, shopping activity, spending, product preferences, and history of contact with promotions.
+
+As part of this work, we performed a data preparation process including, among other things, the removal of unnecessary features and initial data transformations. Next, we utilized visualization methods aimed at understanding variable distributions, identifying outliers, and examining relationships between selected features.
+
+The final stage of the report involves the construction and comparison of several classification models used to predict whether a customer will respond to a promotion. For this purpose, we utilized various machine learning algorithms and evaluated their effectiveness using selected classification quality metrics.
+
+```{python}
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+pd.set_option('display.max_columns', None)
+
+# Keep original file location as requested
+data = pd.read_csv('C:/Users/krzys/OneDrive/Pulpit/DM Project/Dane_clothing.txt')
+```
+
+
+# Column Renaming
+To increase readability and facilitate data interpretation, we changed the column names to more descriptive and intuitive ones. The original variable names were replaced with English equivalents that better reflect the meaning of individual features. Thanks to this, further analysis and interpretation of results are more transparent.
+
+```{python}
+new_column_names = {
+
+    'HHKEY': 'Customer_ID',
+    'ZIP_CODE': 'Zip_Code',
+
+    'FRE': 'Visit_Frequency',
+    'MON': 'Total_Net_Spend',
+    'AVRG': 'Avg_Spend_Per_Visit',
+    'DAYS': 'Days_In_Database',
+    'FREDAYS': 'Days_Between_Purchases',
+    'LTFREDAY': 'Avg_Days_Between_Purchases',
+    'PERCRET': 'Return_Percentage',
+
+    'HI': 'Purchase_Diversity_Index',
+    'CLASSES': 'Product_Category_Count',
+    'STYLES': 'Items_Purchased_Count',
+    'STORES': 'Stores_Visited_Count',
+
+    'OMONSPEND': 'Spend_Last_Month',
+    'TMONSPEND': 'Spend_Last_3_Months',
+    'SMONSPEND': 'Spend_Last_6_Months',
+    'PREVPD': 'Spend_Year_Ago',
+
+    'AMSPEND': 'Spend_Franchise_A',
+    'PSSPEND': 'Spend_Franchise_PS',
+    'CCSPEND': 'Spend_Franchise_CC',
+    'AXSPEND': 'Spend_Franchise_AX',
+
+    'PSWEATERS': 'Pct_Sweaters',
+    'PKNIT_TOPS': 'Pct_Knit_Tops',
+    'PKNIT_DRES': 'Pct_Knit_Dresses',
+    'PBLOUSES': 'Pct_Blouses',
+    'PJACKETS': 'Pct_Jackets',
+    'PCAR_PNTS': 'Pct_Dress_Pants',
+    'PCAS_PNTS': 'Pct_Casual_Pants',
+    'PSHIRTS': 'Pct_Shirts',
+    'PDRESSES': 'Pct_Dresses',
+    'PSUITS': 'Pct_Suits',
+    'POUTERWEAR': 'Pct_Outerwear',
+    'PJEWELRY': 'Pct_Jewelry',
+    'PFASHION': 'Pct_Fashion',
+    'PLEGWEAR': 'Pct_Legwear_Socks',
+    'PCOLLSPND': 'Pct_Collectibles',
+
+    'GMP': 'Gross_Margin_Percentage',
+    'PROMOS': 'Promotions_Received_Count',
+    'COUPONS': 'Coupons_Used_Count',
+    'MARKDOWN': 'Markdown_Purchase_Percentage',
+
+    'MAILED': 'Promos_Mailed_Last_Year',
+    'RESPONDED': 'Promos_Responded_Last_Year',
+    'RESPONSERATE': 'Response_Rate_Percentage',
+
+    'CLUSTYPE': 'Lifestyle_Cluster_Type',
+
+    'CC_CARD': 'Flag_Credit_Card',
+    'VALPHON': 'Flag_Valid_Phone',
+    'WEB': 'Flag_Online_Buyer',
+
+    'REC': 'TO_DROP_1',
+    'PC_CALC20': 'TO_DROP_2',
+    'STORELOY': 'TO_DROP_3',
+
+    'RESP': 'TARGET_Promo_Response'
+}
+
+data = data.rename(columns=new_column_names)
+```
+
+# Data Cleaning
+At the data preparation stage, we removed variables deemed irrelevant for further analysis and modeling: 'REC', 'PC_CALC20', and 'STORELOY'. These were features that could hinder the interpretation of results because they were not described. By doing this, we reduced the number of analyzed variables and simplified the subsequent data exploration process.
+
+Additionally, we transformed the encoding of the variable regarding whether the customer has a valid phone number. Text values were converted into numeric values, which enables the use of this feature in machine learning models and further analyses.
+
+```{python}
+data = data.drop(columns=[
+    "TO_DROP_1",
+    "TO_DROP_2",
+    "TO_DROP_3"
+])
+
+data['Flag_Valid_Phone'] = (
+    data['Flag_Valid_Phone']
+    .map({'Y': 1, 'N': 0})
+    .astype(int)
+)
+```
+
+```{python}
+na_counts = data.isna().sum().reset_index()
+na_counts.columns = ["Column", "Missing_Count"]
+
+half = len(na_counts) // 2
+
+left = na_counts.iloc[:half].reset_index(drop=True)
+right = na_counts.iloc[half:].reset_index(drop=True)
+
+summary_table = pd.concat([left, right], axis=1)
+
+summary_table.style.hide(axis='index')
+```
+
+We verified the occurrence of missing values for all variables in the dataset. The analysis showed that the dataset does not contain missing values, meaning there was no need to apply additional methods for imputation or row removal.
+
+```{python}
+data.info()
+```
+
+We presented basic information regarding the dataset, its structure, and variable types. The dataset contains 21,740 observations and 48 variables describing clothing store customers, their purchasing behavior, spending history, promotional activity, and product preferences.
+
+The data includes both integer variables (int64) and floating-point variables (float64). Integer variables mainly concern the number of visits, the number of coupons used, the number of product categories, or binary information describing specific customer characteristics, e.g., holding a credit card or online shopping activity. On the other hand, float64 variables primarily describe financial values, percentage indicators, and various measures of customer purchasing activity.
+
+The dataset also contains percentage variables representing the share of individual product categories in customer purchases, which allows for a better analysis of shopping preferences and spending structures. An essential element of the data is the target variable TARGET_Promo_Response, which indicates whether a customer responded to a promotion. This variable was used in the subsequent part of the project to build classification models.
+
+```{python}
+identifiers = [
+    'Customer_ID',
+    'Zip_Code',
+    'Lifestyle_Cluster_Type',
+    'TARGET_Promo_Response'
+]
+
+percentage_columns = [
+    col for col in data.columns
+    if col.startswith('Pct_')
+]
+
+continuous_columns = [
+    col for col in data.columns
+    if not col.startswith('Pct_')
+    and not col.startswith('Flag_')
+    and col not in identifiers
+    and data[col].dtype in ['int64', 'float64']
+]
+```
+
+# Descriptive Statistics
+
+```{python}
+data[continuous_columns].describe().round(2).T
+```
+
+The table presents basic descriptive statistics for the quantitative variables in the dataset. For each variable, the number of observations, mean value, standard deviation, minimum and maximum values, and quartiles describing the data distribution are presented.
+
+Based on the statistics, a large variation in customer behavior can be observed. The average number of customer visits is approximately 5, but the maximum value reaches as many as 115 visits, indicating the presence of highly active customers. A similar situation can be observed for spending – the average sum of net spending is around 473, while the maximum value exceeds 22,000. This indicates the presence of outliers and high asymmetry in the distributions of some financial variables.
+
+Significant differences between the median and maximum values are also visible for many features related to spending and purchasing activity. This may suggest that the majority of customers are characterized by moderate activity, while a small group generates very high purchase values or visit frequencies.
+
+However, we will not deal with removing outliers, as they may contain valuable information about customer behavior that can be important for modeling.
+
+Analyzing the variables related to promotions, it can be noticed that the average customer received about 12 promotions, but the average number of responses to promotions is much lower, standing at around 1.2. This indicates that only a portion of customers actively respond to the store's marketing activities.
+
+Variables describing purchasing preferences and customer behavior are also interesting. The average number of product categories purchased by a customer is approximately 7, while the average number of items purchased exceeds 17. The data therefore suggests a relatively high diversity of purchases among customers.
+
+In many variables, we observe high standard deviations relative to the mean values, which indicates high data variability. This characteristic of the dataset can have a significant impact on subsequent stages of modeling and justifies the use of methods robust to outliers, as well as the analysis of variable distributions using plots.
+
+# Analysis of Continuous Variable Distributions
+In order to examine the nature of continuous variables more closely, we conducted an analysis of their distributions using histograms. These types of plots allow us to evaluate the shape of the data distribution, the level of asymmetry, the concentration of observations, and the presence of potential outliers. Analyzing distributions is particularly important before the modeling stage because many algorithmic methods are sensitive to highly skewed distributions and extreme observations.
+
+Already at the descriptive statistics stage, we noticed that some variables are characterized by very large maximum values compared to medians and quartiles. This meant the occurrence of single or few extreme observations that could dominate the visualizations and hinder the interpretation of typical customer behavior. For this reason, we decided not to remove outliers from the dataset, as they may contain essential business information; however, for the purpose of the plots themselves, we limited their impact.
+
+To do this, for each analyzed variable, we excluded the bottom 1% and the top 5% of values, utilizing the appropriate quantiles of our variables' distribution. Thanks to this, the histograms became more readable and allowed for a better view of the actual distribution of the majority of observations, without the dominance of individual values. This approach made it possible to preserve the full dataset for further modeling while improving the quality of visual data exploration.
+
+Additionally, we decided not to present histograms for all variables. Some features were very heavily dominated by specific values, making those plots uninformative. For this reason, we manually selected only those variables whose histograms allowed us to observe critical distributional properties, such as asymmetry, data concentration, dispersion, or potential multimodality.
+
+Based on the resulting histograms, it can be seen that many variables have right-skewed distributions. This means that the majority of customers achieve relatively low or moderate values for the analyzed features, while a small group of customers generates very high results. This is particularly visible in the case of variables related to spending, the number of products purchased, or the number of visits. These types of distributions are typical for customer data in business and marketing analyses.
+
+The histograms also revealed that some variables show a clear concentration of observations around specific values, which may suggest the existence of distinct customer groups with similar purchasing behaviors.
+
+```{python}
+import math
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+to_exclude = [
+    'Spend_Franchise_A', 'Spend_Franchise_PS', 'Spend_Franchise_AX',
+    'Spend_Last_3_Months', 'Spend_Last_Month',
+    'Spend_Year_Ago', 'Coupons_Used_Count',
+    'Promos_Responded_Last_Year', 'Response_Rate_Percentage',
+    'Return_Percentage', 'Markdown_Purchase_Percentage',
+    'Spend_Last_6_Months'
+]
+
+hist_columns = [col for col in continuous_columns if col not in to_exclude]
+
+n_cols = 2
+n_rows = math.ceil(len(hist_columns) / n_cols)
+
+fig, axes = plt.subplots(
+    n_rows,
+    n_cols,
+    figsize=(12, n_rows * 3)
+)
+
+axes = axes.flatten()
+
+for i, col in enumerate(hist_columns):
+
+    lower_bound = data[col].quantile(0.01)
+    upper_bound = data[col].quantile(0.95)
+
+    plot_data = data[
+        (data[col] >= lower_bound) &
+        (data[col] <= upper_bound)
+    ]
+
+    sns.histplot(
+        data=plot_data,
+        x=col,
+        kde=True,
+        bins=30,
+        ax=axes[i]
+    )
+
+    filename_label = col.replace('_', ' ')
+    axes[i].set_title(col, fontsize=9)
+    axes[i].set_xlabel("")
+    axes[i].set_ylabel("")
+
+# Remove empty subplots
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+plt.tight_layout()
+plt.show()
+```
+
+# Outlier Analysis
+In the next step, we utilized box plots, which enable the assessment of data dispersion and the identification of outlying observations. Unlike histograms, which show the overall shape of the distribution, box plots allow for comparing variables in terms of the median, interquartile range, and the number of extreme values.
+
+Due to the large number of quantitative variables, we decided to limit the analysis to the same features previously used for the histograms. This allowed us to focus on the variables carrying the most information and avoid presenting plots that would be poorly legible.
+
+The box plots confirmed earlier observations regarding the presence of numerous outliers. In many cases, the majority of observations were concentrated within a relatively small range of values, while individual customers achieved results many times higher than typical ones. This proves a high diversity in customer behavior and the presence of a group of highly active consumers.
+
+On many box plots, a clear asymmetry in distributions can also be observed. Medians are often located closer to the lower quartiles, and the upper 'whiskers' of the plots are much longer than the lower ones. This indicates a predominance of right-skewed distributions, which is consistent with the observations obtained earlier from the histograms.
+
+The analysis of box plots also allowed for evaluating the variability of individual features. Some variables were characterized by a very wide interquartile range, indicating a high diversity of customer behavior, while others were more concentrated around the median.
+
+```{python}
+import math
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+box_columns = [
+    col for col in continuous_columns
+    if col not in to_exclude
+]
+
+n_cols = 3
+
+n_rows = math.ceil(len(box_columns) / n_cols)
+
+# Creating a grid of plots
+fig, axes = plt.subplots(
+    n_rows,
+    n_cols,
+    figsize=(15, n_rows * 2.5)
+)
+
+axes = axes.flatten()
+
+for i, col in enumerate(box_columns):
+
+    sns.boxplot(
+        x=data[col],
+        ax=axes[i]
+    )
+
+    axes[i].set_title(col, fontsize=9)
+    axes[i].set_xlabel("")
+
+for j in range(i + 1, len(axes)):
+    fig.delaxes(axes[j])
+
+plt.tight_layout()
+plt.show()
+```
+
+Additionally, we noticed that the variable 'Lifestyle_Cluster_Type' possesses a very large number of unique categories. This means that classical methods for encoding categorical variables, such as one-hot encoding, could lead to the creation of a very large number of new columns. In practice, this would increase the dimensionality of the dataset, hinder model interpretation, and could negatively affect their effectiveness and training time.
+
+For this reason, we decided to apply the target encoding method. This method consists of replacing each category with the mean value of the target variable calculated for that group. In our case, for each lifestyle cluster type, we calculated the average level of customer response to the promotion and then assigned this value to all observations belonging to the given cluster.
+
+This approach preserves information about the relationship between the category and the target variable while avoiding a sharp increase in the number of features in the dataset. Thanks to this, the categorical variable is transformed into a numerical format that can be directly used by machine learning models.
+
+The application of target encoding is particularly useful in situations where a variable has a large number of categories and when it is assumed that different groups of customers differ in terms of the probability of responding to promotions. In our case, this transformation allowed us to simplify the data while retaining crucial information regarding the behaviors of customers representing different shopping styles.
+
+```{python}
+data['Lifestyle_Cluster_Type'] = (
+    data
+    .groupby('Lifestyle_Cluster_Type')['TARGET_Promo_Response']
+    .transform('mean')
+    .round(4)
+)
+```
+
+# Correlation Analysis
+
+```{python}
+d = data.select_dtypes(include='number')
+target = 'TARGET_Promo_Response'
+
+top = d.corr()[target].abs().sort_values(ascending=False).head(11).index
+plt.figure(figsize = (4,3))
+sns.heatmap(d[top].corr(), cmap='coolwarm', center=0)
+
+plt.show()
+```
+
+In order to better understand the relationships between numerical variables, we prepared a heatmap of the correlation matrix. This allows us to evaluate the strength and direction of dependencies between individual features in a transparent manner.
+
+Due to the large number of variables present in the dataset, we decided not to present the full correlation matrix, as it would be poorly legible and difficult to interpret. Instead, we selected only the variables most highly correlated with the target variable 'TARGET_Promo_Response'. This allowed us to focus the analysis on features that potentially have the greatest impact on predicting customer response to promotions and increased the readability of the visualization itself.
+
+Several important relationships can be noticed on the heatmap. The strongest positive correlations with the target variable are shown by features directly related to customers' past promotional activity, such as the number of previous responses to promotions or the percentage response rate. This is an intuitive result — customers who responded to promotions in the past have a higher probability of responding again in the future.
+
+Positive dependencies are also visible between the target variable and variables describing customer engagement, such as the number of visits, the number of products purchased, or the level of spending. This may suggest that more active customers more frequently respond to the store's marketing activities. At the same time, these correlations are not perfectly high, indicating that the response to a promotion depends on a combination of many factors rather than a single dominant feature.
+
+The heatmap also shows strong dependencies between some of the explanatory variables. For instance, variables related to spending across different time periods are strongly positively correlated with each other, which is natural — customers spending a lot of money in recent months often belong to customers generating high overall expenditures as well. Similarly, variables regarding promotions and customers' past responses show clear connections.
+
+The analysis of the correlation matrix also allows for noticing the potential problem of multicollinearity among some features. High correlations between certain variables can affect the performance of linear models and hinder the interpretation of coefficients. Meanwhile, for models based on decision trees, such as Random Forest or XGBoost, this problem is usually less significant.
+
+In summary, the heatmap confirmed that the variables describing past promotional behaviors, purchasing activity, and customer engagement levels hold the greatest importance for predicting customer response to promotions. The resulting dependencies provide an essential clue for interpreting predictive model outcomes and assessing which features have the greatest impact on customer decisions.
+
+# Modeling - model comparison
+
+```{python}
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+
+model_data = data.drop(columns=['Customer_ID', 'Zip_Code'])
+X = model_data.drop('TARGET_Promo_Response', axis=1)
+y = model_data['TARGET_Promo_Response']
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42
+)
+
+scaler = StandardScaler()
+X_train_s = scaler.fit_transform(X_train)
+X_test_s = scaler.transform(X_test)
+
+
+from sklearn.model_selection import GridSearchCV
+
+
+rf_selector = RandomForestClassifier(random_state=42)
+rf_selector.fit(X_train, y_train)
+
+importances = pd.Series(rf_selector.feature_importances_, index=X.columns)
+top_features = importances.sort_values(ascending=False).head(10).index.tolist()
+
+
+X_train_top = X_train[top_features]
+X_test_top = X_test[top_features]
+
+
+rf_params = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [10, 20, None],
+    'min_samples_split': [2, 5]
+}
+
+xgb_params = {
+    'learning_rate': [0.01, 0.1, 0.2],
+    'n_estimators': [100, 200],
+    'max_depth': [3, 6]
+}
+
+grid_rf = GridSearchCV(RandomForestClassifier(random_state=42), rf_params, scoring='roc_auc', cv=3, n_jobs=-1)
+grid_rf.fit(X_train_top, y_train)
+
+grid_xgb = GridSearchCV(XGBClassifier(eval_metric='logloss', random_state=42), xgb_params, scoring='roc_auc', cv=3, n_jobs=-1)
+grid_xgb.fit(X_train_top, y_train)
+
+
+
+models = {
+    "Logistic Regression": (LogisticRegression(max_iter=1000), X_train_s, X_test_s),
+    "LDA": (LinearDiscriminantAnalysis(), X_train_s, X_test_s),
+    "Random Forest": (RandomForestClassifier(random_state=42), X_train, X_test),
+    "XGBoost": (XGBClassifier(eval_metric='logloss', random_state=42), X_train, X_test),
+    "RF (Top 10 + Tuned)": (grid_rf.best_estimator_, X_train_top, X_test_top),
+    "XGBoost (Top 10 + Tuned)": (grid_xgb.best_estimator_, X_train_top, X_test_top)
+}
+
+results = []
+
+for name, (model, X_tr, X_te) in models.items():
+    model.fit(X_tr, y_train)
+
+    pred = model.predict(X_te)
+    prob = model.predict_proba(X_te)[:, 1]
+    pred = (prob >= 0.3).astype(int)
+
+    results.append([
+        name,
+        roc_auc_score(y_test, prob),
+        accuracy_score(y_test, pred),
+        precision_score(y_test, pred),
+        recall_score(y_test, pred),
+        f1_score(y_test, pred)
+    ])
+
+pd.DataFrame(
+    results,
+    columns=["Model", "ROC AUC", "Accuracy", "Precision", "Recall", "F1"]
+).sort_values("ROC AUC", ascending=False).style.hide(axis='index')
+```
+
+Choosing the final model requires balancing statistical goals with business needs:
+1. ROC AUC (Discriminatory Power): This is our primary overarching metric. XGBoost (Tuned) achieved the highest score (0.8565), meaning it is best at distinguishing "buying" customers from "uninterested" ones. A score above 0.85 is considered a very high prediction quality.
+2. Recall: From a marketing perspective, this is a key measure. It tells us what percentage of realistically interested people the model managed to correctly identify. Here, Logistic Regression is the leader (0.5873). Choosing this model will allow for capturing the maximum number of potential transactions.
+3. Precision: LDA is the leader (0.5197). This means that LDA makes fewer mistakes when indicating a customer as interested, but this comes at the cost of a very low Recall, meaning the model is overly cautious.
+4. The LDA model has the highest Accuracy but the lowest Recall. In business, such a model is of little use because its high accuracy stems mainly from correctly predicting the lack of response, which in an imbalanced dataset (the majority of customers do not respond) is a trivial task.
+
+The benefit of the conducted parameter tuning and the selection of the 10 most important variables (Feature Importance) is clearly visible:
+1. XGBoost recorded an increase in ROC AUC from 0.834 to 0.856 after limiting variables to the Top 10 and selecting hyperparameters.
+2. Limiting the number of features removed "noise", which allowed tree-based models (RF, XGB) to better generalize knowledge about customer purchasing behaviors.
+
+The choice depends on the cost of reaching the customer:
+1. Low communication cost (E-mail, Push): Logistic Regression, due to the highest Recall (58.7%). This will maximize the campaign's reach and the number of conversions.
+2.High communication cost (Catalog, Direct Mail): XGBoost (Top 10 + Tuned). It provides the best balance (F1: 0.5382) between precise audience selection and reach effectiveness.
+
+The models are based on an optimal cutoff threshold of $p \ge 0.3$, which allowed for a significant increase in sensitivity (Recall) at the expense of an acceptable drop in precision, which is a standard and desirable practice in direct marketing.
+
+# Proposals for Further Research and Model Development
+
+The conducted analysis constitutes a good foundation for creating a system that predicts customer responses to promotions, but the entire project can be further developed and improved. Current models achieve good results but are limited to the data provided in the dataset. Adding new information could further improve prediction effectiveness and help the company plan marketing activities better.
+
+One possible direction for development would be to analyze the customer purchases themselves in more detail. Currently, the models mainly use information about expenditures and purchasing activity, but it would be possible to additionally check exactly what products customers are buying. Thanks to this, it would be possible to detect whether specific customer groups more frequently respond to promotions for certain product categories, such as premium clothing, accessories, or seasonal products.
+
+In the future, it would also be worthwhile to include additional external factors, such as holiday periods, seasonal sales, or the economic situation in different regions. Customer behaviors often change depending on the period of the year, so such information could positively impact the models' effectiveness.
+
+In subsequent stages of the project, more advanced models could also be tested. One idea is to combine several models into a single, larger ensemble system. This approach often allows for obtaining slightly better results than using a single model.
+
+It is also worth remembering that not every customer responding to a promotion is equally valuable to the company. In the future, the model could be extended to predict not only the response to the promotion itself but also the long-term customer lifetime value. This would allow for focusing marketing activities on customers who have the greatest potential to remain loyal store customers.
+
+Ultimately, the best way to verify the model's effectiveness would be tests conducted under real business conditions. Customers could be divided into two groups — one selected by the model and another selected at random — and then the effectiveness of the promotional campaigns could be compared between both groups. This would allow for evaluating whether the model truly helps increase the number of customer responses and improve the efficiency of the store's marketing activities.
+
+
+
